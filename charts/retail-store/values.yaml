@@ -2,17 +2,17 @@ cart:
   fullnameOverride: carts
   image:
     repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/cart
-    tag: "770c1c0528382702a23fb17e51396a28c2ab3509"
+    tag: "4b831afdca1c25ad5f2fde2da5471dc31054fe4a"
 catalog:
   fullnameOverride: catalog
   image:
     repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/catalog
-    tag: "770c1c0528382702a23fb17e51396a28c2ab3509"
+    tag: "4b831afdca1c25ad5f2fde2da5471dc31054fe4a"
 checkout:
   fullnameOverride: checkout
   image:
     repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/checkout
-    tag: "770c1c0528382702a23fb17e51396a28c2ab3509"
+    tag: "4b831afdca1c25ad5f2fde2da5471dc31054fe4a"
   retail:
     checkout:
       endpoints:
@@ -21,12 +21,12 @@ orders:
   fullnameOverride: orders
   image:
     repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/orders
-    tag: "770c1c0528382702a23fb17e51396a28c2ab3509"
+    tag: "4b831afdca1c25ad5f2fde2da5471dc31054fe4a"
 ui:
   fullnameOverride: ui
   image:
     repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/ui
-    tag: "770c1c0528382702a23fb17e51396a28c2ab3509"
+    tag: "4b831afdca1c25ad5f2fde2da5471dc31054fe4a"
   app:
     endpoints:
       catalog: http://catalog:80
