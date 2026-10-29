@@ -19,7 +19,7 @@ output "eks_cluster_name" {
 }
 
 output "eks_cluster_endpoint" {
-  description = "Private Kubernetes API endpoint for the EKS cluster."
+  description = "Kubernetes API endpoint for the EKS cluster."
   value       = aws_eks_cluster.eks.endpoint
 }
 
@@ -28,13 +28,28 @@ output "eks_node_group_name" {
   value       = aws_eks_node_group.workers.node_group_name
 }
 
+output "eks_oidc_issuer" {
+  description = "OIDC issuer URL for the EKS cluster."
+  value       = aws_eks_cluster.eks.identity[0].oidc[0].issuer
+}
+
+output "alb_controller_role_arn" {
+  description = "IAM role assumed by the AWS Load Balancer Controller."
+  value       = aws_iam_role.alb_controller.arn
+}
+
+output "argocd_namespace" {
+  description = "Namespace where Argo CD is installed."
+  value       = "argocd"
+}
+
 output "bastion_instance_id" {
-  description = "ID of the EKS bastion instance."
+  description = "Instance ID of the Systems Manager managed EKS bastion."
   value       = aws_instance.bastion.id
 }
 
 output "bastion_public_ip" {
-  description = "Public IPv4 address of the EKS bastion."
+  description = "Public IPv4 address of the Systems Manager managed EKS bastion."
   value       = aws_instance.bastion.public_ip
 }
 

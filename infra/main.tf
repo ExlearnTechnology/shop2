@@ -1,21 +1,41 @@
 
 terraform {
-  required_version = ">= 1.5.0"
+  required_version = ">= 1.5.0, < 2.0.0"
 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0, < 7.0"
+      version = ">= 6.70, < 7.0"
     }
   }
 }
 
 provider "aws" {
-  region = "ap-south-1"
+  region = var.aws_region
 }
 
 data "aws_availability_zones" "available" {
   state = "available"
+}
+
+data "aws_ami" "amazon_linux_2023" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023.*-x86_64"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
 }
 
 resource "aws_vpc" "eks" {
@@ -24,8 +44,8 @@ resource "aws_vpc" "eks" {
   enable_dns_hostnames = true
 
   tags = {
-    Name                               = "retail-eks-vpc"
-    "kubernetes.io/cluster/retail-eks" = "shared"
+    Name                                        = "retail-eks-vpc"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -46,9 +66,9 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                               = "retail-eks-public-${count.index + 1}"
-    "kubernetes.io/cluster/retail-eks" = "shared"
-    "kubernetes.io/role/elb"           = "1"
+    Name                                        = "retail-eks-public-${count.index + 1}"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    "kubernetes.io/role/elb"                    = "1"
   }
 }
 
@@ -60,9 +80,9 @@ resource "aws_subnet" "private" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
-    Name                               = "retail-eks-private-${count.index + 1}"
-    "kubernetes.io/cluster/retail-eks" = "shared"
-    "kubernetes.io/role/internal-elb"  = "1"
+    Name                                        = "retail-eks-private-${count.index + 1}"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    "kubernetes.io/role/internal-elb"           = "1"
   }
 }
 
@@ -153,8 +173,9 @@ resource "aws_iam_role_policy_attachment" "eks_cluster" {
 }
 
 resource "aws_eks_cluster" "eks" {
-  name     = "retail-eks"
+  name     = var.cluster_name
   role_arn = aws_iam_role.eks_cluster.arn
+  version  = var.kubernetes_version
 
   access_config {
     authentication_mode                         = "API_AND_CONFIG_MAP"
@@ -164,7 +185,8 @@ resource "aws_eks_cluster" "eks" {
   vpc_config {
     subnet_ids              = aws_subnet.private[*].id
     endpoint_private_access = true
-    endpoint_public_access  = false
+    endpoint_public_access  = true
+    public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
   }
 
   depends_on = [
@@ -220,9 +242,20 @@ resource "aws_eks_node_group" "workers" {
   capacity_type  = "ON_DEMAND"
 
   scaling_config {
-    min_size     = 1
-    desired_size = 1
-    max_size     = 1
+    min_size     = var.node_min_size
+    desired_size = var.node_desired_size
+    max_size     = var.node_max_size
+  }
+
+  lifecycle {
+    precondition {
+      condition = (
+        var.node_min_size >= 1 &&
+        var.node_min_size <= var.node_desired_size &&
+        var.node_desired_size <= var.node_max_size
+      )
+      error_message = "Node scaling must satisfy 1 <= node_min_size <= node_desired_size <= node_max_size."
+    }
   }
 
   update_config {
@@ -314,16 +347,8 @@ resource "aws_eks_addon" "ebs_csi" {
 
 resource "aws_security_group" "bastion" {
   name        = "retail-eks-bastion-sg"
-  description = "Restricted SSH access for the EKS bastion."
+  description = "Outbound-only access for the Systems Manager managed EKS bastion."
   vpc_id      = aws_vpc.eks.id
-
-  ingress {
-    description = "SSH from the approved client IP."
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
 
   egress {
     from_port   = 0
@@ -361,6 +386,11 @@ data "aws_iam_policy_document" "bastion_assume_role" {
 resource "aws_iam_role" "bastion" {
   name               = "retail-eks-bastion-role"
   assume_role_policy = data.aws_iam_policy_document.bastion_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "bastion_ssm" {
+  role       = aws_iam_role.bastion.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 resource "aws_iam_role_policy" "bastion_describe_cluster" {
@@ -403,7 +433,7 @@ resource "aws_eks_access_policy_association" "bastion_admin" {
 
 
 resource "aws_instance" "bastion" {
-  ami                         = "ami-0c7632fb77f35db43"
+  ami                         = data.aws_ami.amazon_linux_2023.id
   instance_type               = "t3.micro"
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.bastion.id]
@@ -414,21 +444,25 @@ resource "aws_instance" "bastion" {
     #!/bin/bash
     set -euxo pipefail
 
-    apt-get update
-    apt-get install -y curl unzip ec2-instance-connect
+    dnf install -y curl unzip tar gzip
 
     curl -fsSLo awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -q awscliv2.zip
     ./aws/install
 
-    CLUSTER_VERSION="$(aws eks describe-cluster --region ap-south-1 --name retail-eks --query 'cluster.version' --output text)"
+    CLUSTER_VERSION="$(aws eks describe-cluster --region ${var.aws_region} --name ${var.cluster_name} --query 'cluster.version' --output text)"
     KUBECTL_VERSION="$(curl -fsSL "https://dl.k8s.io/release/stable-$${CLUSTER_VERSION}.txt")"
     curl -fsSLo kubectl "https://dl.k8s.io/release/$${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
     chmod +x kubectl
     mv kubectl /usr/local/bin/
 
-    aws eks update-kubeconfig --region ap-south-1 --name retail-eks
+    curl -fsSLo helm.tar.gz "https://get.helm.sh/helm-v3.18.6-linux-amd64.tar.gz"
+    tar -xzf helm.tar.gz linux-amd64/helm
+    install linux-amd64/helm /usr/local/bin/helm
+
+    aws eks update-kubeconfig --region ${var.aws_region} --name ${var.cluster_name}
     kubectl version --client
+    helm version
     aws --version
   EOF
 
@@ -442,6 +476,7 @@ resource "aws_instance" "bastion" {
 
   depends_on = [
     aws_eks_access_policy_association.bastion_admin,
+    aws_iam_role_policy_attachment.bastion_ssm,
     aws_iam_role_policy.bastion_describe_cluster,
     aws_route_table_association.public,
     aws_vpc_security_group_ingress_rule.eks_bastion_https,
