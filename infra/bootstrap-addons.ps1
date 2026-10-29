@@ -43,6 +43,15 @@ foreach ($name in $requiredEnvironment) {
 }
 
 $aws = (Get-Command aws -ErrorAction Stop).Source
+$awsVersion = & $aws --version 2>&1
+if ($LASTEXITCODE -ne 0 -or $awsVersion -notmatch "aws-cli/2\.") {
+    throw @"
+AWS CLI v2 is required for EKS authentication with this kubectl version.
+Detected: $awsVersion
+Install or update AWS CLI v2, confirm 'aws --version' reports aws-cli/2.x, then rerun terraform apply.
+"@
+}
+
 $toolDirectory = Join-Path $env:LOCALAPPDATA "retail-eks-tools"
 $null = New-Item -ItemType Directory -Force -Path $toolDirectory
 $kubectl = Join-Path $toolDirectory "kubectl.exe"

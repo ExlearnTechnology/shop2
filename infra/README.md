@@ -26,9 +26,12 @@ protected remote backend before applying.
 
 - Windows with Windows PowerShell 5.1 or later
 - Terraform 1.5 or later
-- AWS CLI v2 configured with credentials for an IAM principal that can create
-  the required VPC, EKS, EC2, ECR, IAM, and OIDC resources
+- AWS CLI **v2** (AWS CLI v1 is not supported by the EKS bootstrap) configured
+  with credentials for an IAM principal that can create the required VPC, EKS,
+  EC2, ECR, IAM, and OIDC resources
 - A public IPv4 address from which you will run Terraform
+- An EC2 key pair in the configured AWS region if you intend to SSH to the
+  bastion (the current instance configuration does not attach a key pair)
 - GitHub Actions enabled for `ExlearnTechnology/shop2`
 
 The EKS public API endpoint defaults to `0.0.0.0/0`, which allows connection
@@ -39,8 +42,16 @@ cluster. The Argo CD ALB has a separate allowlist; its default is also
 
 ## Apply
 
-For a safer test setup, open PowerShell in the repository root and restrict
-the EKS API to your current public IP instead of using the permissive default:
+Open PowerShell in the repository root and set your operator's public IP for
+the SSH ingress rule. The Terraform variable rejects `0.0.0.0/0` for SSH:
+
+```powershell
+$operatorCidr = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com").Trim() + "/32"
+$env:TF_VAR_bastion_ssh_allowed_cidrs = ConvertTo-Json @($operatorCidr) -Compress
+```
+
+For a safer test setup, also restrict the EKS API to your current public IP
+instead of using the permissive default:
 
 ```powershell
 $operatorCidr = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com").Trim() + "/32"
@@ -62,6 +73,13 @@ terraform -chdir=infra apply terraform.tfplan
 Changing this variable updates the Argo CD ALB allowlist without reinstalling
 Argo CD. Changing `cluster_endpoint_public_access_cidrs` separately updates
 the Kubernetes API endpoint allowlist.
+
+The bastion security group permits SSH only from
+`bastion_ssh_allowed_cidrs`. However, the current bastion EC2 configuration
+does not attach an EC2 key pair, so allowing port 22 alone does not provide a
+working SSH login. Continue to use the configured SSM access unless the
+bastion is deliberately recreated with a key pair and its private key is
+secured outside the repository.
 
 Review the plan before applying:
 

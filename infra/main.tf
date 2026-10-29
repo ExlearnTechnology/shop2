@@ -347,8 +347,16 @@ resource "aws_eks_addon" "ebs_csi" {
 
 resource "aws_security_group" "bastion" {
   name        = "retail-eks-bastion-sg"
-  description = "Outbound-only access for the Systems Manager managed EKS bastion."
+  description = "Restricted SSH and outbound access for the EKS bastion."
   vpc_id      = aws_vpc.eks.id
+
+  ingress {
+    description = "SSH from explicitly allowed operator CIDRs."
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = var.bastion_ssh_allowed_cidrs
+  }
 
   egress {
     from_port   = 0
@@ -444,7 +452,7 @@ resource "aws_instance" "bastion" {
     #!/bin/bash
     set -euxo pipefail
 
-    dnf install -y curl unzip tar gzip
+    dnf install -y unzip tar gzip
 
     curl -fsSLo awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -q awscliv2.zip

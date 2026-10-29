@@ -49,6 +49,20 @@ variable "argocd_ingress_allowed_cidrs" {
   }
 }
 
+variable "bastion_ssh_allowed_cidrs" {
+  description = "Trusted IPv4 CIDRs allowed to connect to the bastion over SSH. Do not use 0.0.0.0/0."
+  type        = list(string)
+
+  validation {
+    condition = (
+      length(var.bastion_ssh_allowed_cidrs) > 0 &&
+      alltrue([for cidr in var.bastion_ssh_allowed_cidrs : can(cidrnetmask(cidr))]) &&
+      !contains(var.bastion_ssh_allowed_cidrs, "0.0.0.0/0")
+    )
+    error_message = "Provide at least one trusted IPv4 CIDR for SSH and do not use 0.0.0.0/0."
+  }
+}
+
 variable "node_min_size" {
   description = "Minimum number of EKS worker nodes."
   type        = number
