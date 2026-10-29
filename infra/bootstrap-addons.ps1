@@ -265,6 +265,7 @@ Update AWS CLI to a current v2 release, confirm 'aws --version' reports aws-cli/
         "--version", $env:ARGOCD_CHART_VERSION,
         "--namespace", "argocd",
         "--create-namespace",
+        "--set", "configs.params.server\.insecure=true",
         "--wait",
         "--timeout", "20m"
     )
@@ -279,8 +280,8 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
-    alb.ingress.kubernetes.io/backend-protocol: HTTPS
-    alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
     alb.ingress.kubernetes.io/healthcheck-path: /healthz
     alb.ingress.kubernetes.io/inbound-cidrs: "$($env:ARGOCD_ALLOWED_CIDRS)"
 spec:
@@ -294,7 +295,7 @@ spec:
               service:
                 name: argocd-server
                 port:
-                  number: 443
+                  number: 80
 "@
     [System.IO.File]::WriteAllText(
         $argocdIngressPath,

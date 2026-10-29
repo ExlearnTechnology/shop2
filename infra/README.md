@@ -106,7 +106,8 @@ review the Terraform plan for the replacement before applying.
 
 The bootstrap also creates an Argo CD ingress and prints its AWS-generated
 ALB DNS name when available. The UI is reachable at `http://<ALB-DNS>` from
-the configured allowlist. **The test endpoint uses HTTP, not HTTPS; login
+the configured allowlist. Argo CD is configured for insecure HTTP behind the
+HTTP-only ALB listener. **The test endpoint uses HTTP, not HTTPS; login
 traffic is not encrypted between your browser and the ALB.** With the default
 `0.0.0.0/0`, anyone can reach the login page and attempt to sign in. Restrict
 the allowlist and use a domain with an ACM certificate for HTTPS before
