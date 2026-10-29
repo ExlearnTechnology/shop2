@@ -1,0 +1,39 @@
+cart:
+  fullnameOverride: carts
+  image:
+    repository: public.ecr.aws/aws-containers/retail-store-sample-cart
+    tag: "1.2.2"
+
+catalog:
+  fullnameOverride: catalog
+  image:
+    repository: public.ecr.aws/aws-containers/retail-store-sample-catalog
+    tag: "1.2.2"
+
+checkout:
+  fullnameOverride: checkout
+  image:
+    repository: public.ecr.aws/aws-containers/retail-store-sample-checkout
+    tag: "1.2.2"
+  retail:
+    checkout:
+      endpoints: 
+        orders: http://orders:80
+
+orders:
+  fullnameOverride: orders
+  image:
+    repository: public.ecr.aws/aws-containers/retail-store-sample-orders
+    tag: "1.2.2"
+
+ui:
+  fullnameOverride: ui
+  image:
+    repository: public.ecr.aws/aws-containers/retail-store-sample-ui
+    tag: "1.2.2"
+  app:
+    endpoints:
+      catalog: http://catalog:80
+      carts: http://carts:80
+      checkout: http://checkout:80
+      orders: http://orders:80

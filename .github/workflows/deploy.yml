@@ -1,0 +1,117 @@
+name: Build and update retail store GitOps
+
+on: workflow_dispatch
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  IMAGE_TAG: ${{ github.sha }}
+
+concurrency:
+  group: retail-store-gitops
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: cart
+            context: src/cart
+            image: retail-store/cart
+          - service: catalog
+            context: src/catalog
+            image: retail-store/catalog
+          - service: checkout
+            context: src/checkout
+            image: retail-store/checkout
+          - service: orders
+            context: src/orders
+            image: retail-store/orders
+          - service: ui
+            context: src/ui
+            image: retail-store/ui
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+
+  # update-gitops:
+  #   name: Update Helm image tags
+  #   runs-on: ubuntu-latest
+  #   needs: build
+  #   permissions:
+  #     contents: write
+  #     id-token: write
+  #   steps:
+  #     - name: Check out source
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: ${{ github.ref_name }}
+
+  #     - name: Configure AWS credentials with GitHub OIDC
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+  #         aws-region: ${{ env.AWS_REGION }}
+
+  #     - name: Get ECR registry
+  #       id: registry
+  #       run: echo "registry=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_OUTPUT"
+
+  #     - name: Update chart image values
+  #       uses: mikefarah/yq@v4.45.1
+  #       env:
+  #         IMAGE_TAG: ${{ env.IMAGE_TAG }}
+  #         REGISTRY: ${{ steps.registry.outputs.registry }}
+  #       with:
+  #         cmd: |
+  #           yq -i '
+  #             .cart.image.repository = strenv(REGISTRY) + "/retail-store/cart" |
+  #             .cart.image.tag = strenv(IMAGE_TAG) |
+  #             .catalog.image.repository = strenv(REGISTRY) + "/retail-store/catalog" |
+  #             .catalog.image.tag = strenv(IMAGE_TAG) |
+  #             .checkout.image.repository = strenv(REGISTRY) + "/retail-store/checkout" |
+  #             .checkout.image.tag = strenv(IMAGE_TAG) |
+  #             .orders.image.repository = strenv(REGISTRY) + "/retail-store/orders" |
+  #             .orders.image.tag = strenv(IMAGE_TAG) |
+  #             .ui.image.repository = strenv(REGISTRY) + "/retail-store/ui" |
+  #             .ui.image.tag = strenv(IMAGE_TAG)
+  #           ' charts/retail-store/values.yaml
+
+  #     - name: Commit image tag changes
+  #       run: |
+  #         git config user.name "github-actions[bot]"
+  #         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  #         git add charts/retail-store/values.yaml
+  #         if git diff --cached --quiet; then
+  #           echo "Image tags are already up to date."
+  #           exit 0
+  #         fi
+  #         git commit -m "chore(gitops): update images to ${IMAGE_TAG}"
+  #         git push
