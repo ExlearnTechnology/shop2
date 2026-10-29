@@ -1,36 +1,32 @@
 cart:
   fullnameOverride: carts
   image:
-    repository: public.ecr.aws/aws-containers/retail-store-sample-cart
-    tag: "1.2.2"
-
+    repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/cart
+    tag: "a56abb2237c55fc53a6895262e278f57e921fafc"
 catalog:
   fullnameOverride: catalog
   image:
-    repository: public.ecr.aws/aws-containers/retail-store-sample-catalog
-    tag: "1.2.2"
-
+    repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/catalog
+    tag: "a56abb2237c55fc53a6895262e278f57e921fafc"
 checkout:
   fullnameOverride: checkout
   image:
-    repository: public.ecr.aws/aws-containers/retail-store-sample-checkout
-    tag: "1.2.2"
+    repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/checkout
+    tag: "a56abb2237c55fc53a6895262e278f57e921fafc"
   retail:
     checkout:
-      endpoints: 
+      endpoints:
         orders: http://orders:80
-
 orders:
   fullnameOverride: orders
   image:
-    repository: public.ecr.aws/aws-containers/retail-store-sample-orders
-    tag: "1.2.2"
-
+    repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/orders
+    tag: "a56abb2237c55fc53a6895262e278f57e921fafc"
 ui:
   fullnameOverride: ui
   image:
-    repository: public.ecr.aws/aws-containers/retail-store-sample-ui
-    tag: "1.2.2"
+    repository: 497617901838.dkr.ecr.ap-south-1.amazonaws.com/retail-store/ui
+    tag: "a56abb2237c55fc53a6895262e278f57e921fafc"
   app:
     endpoints:
       catalog: http://catalog:80
