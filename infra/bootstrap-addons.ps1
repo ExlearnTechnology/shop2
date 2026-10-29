@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [switch] $Destroy
+    [switch] $Destroy,
+    [switch] $UpdateIngress
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,6 +50,7 @@ $helm = Join-Path $toolDirectory "helm.exe"
 $kubeconfig = Join-Path $env:TEMP "retail-eks-$($env:EKS_CLUSTER_NAME)-$PID.yaml"
 $loadBalancerValues = Join-Path $env:TEMP "retail-eks-alb-values-$PID.json"
 $applicationValuesPath = Join-Path $env:TEMP "retail-eks-argocd-app-values-$PID.json"
+$argocdIngressPath = Join-Path $env:TEMP "retail-eks-argocd-ingress-$PID.yaml"
 
 try {
     Invoke-NativeCommand -FilePath $aws -Arguments @(
@@ -72,19 +74,21 @@ try {
         -OutFile $kubectl `
         -UseBasicParsing
 
-    $helmVersion = "v3.18.6"
-    $helmArchive = Join-Path $env:TEMP "helm-$helmVersion-windows-amd64-$PID.zip"
-    $helmExtract = Join-Path $env:TEMP "helm-$helmVersion-windows-amd64-$PID"
-    Invoke-WebRequest `
-        -Uri "https://get.helm.sh/helm-$helmVersion-windows-amd64.zip" `
-        -OutFile $helmArchive `
-        -UseBasicParsing
-    Expand-Archive -LiteralPath $helmArchive -DestinationPath $helmExtract -Force
-    Copy-Item `
-        -LiteralPath (Join-Path $helmExtract "windows-amd64\helm.exe") `
-        -Destination $helm `
-        -Force
-    Remove-Item -LiteralPath $helmArchive,$helmExtract -Recurse -Force
+    if (-not $UpdateIngress) {
+        $helmVersion = "v3.18.6"
+        $helmArchive = Join-Path $env:TEMP "helm-$helmVersion-windows-amd64-$PID.zip"
+        $helmExtract = Join-Path $env:TEMP "helm-$helmVersion-windows-amd64-$PID"
+        Invoke-WebRequest `
+            -Uri "https://get.helm.sh/helm-$helmVersion-windows-amd64.zip" `
+            -OutFile $helmArchive `
+            -UseBasicParsing
+        Expand-Archive -LiteralPath $helmArchive -DestinationPath $helmExtract -Force
+        Copy-Item `
+            -LiteralPath (Join-Path $helmExtract "windows-amd64\helm.exe") `
+            -Destination $helm `
+            -Force
+        Remove-Item -LiteralPath $helmArchive,$helmExtract -Recurse -Force
+    }
 
     Invoke-NativeCommand -FilePath $aws -Arguments @(
         "eks", "update-kubeconfig",
@@ -94,6 +98,24 @@ try {
     )
     $env:KUBECONFIG = $kubeconfig
     $env:PATH = "$toolDirectory;$env:PATH"
+
+    if ($UpdateIngress) {
+        if ([string]::IsNullOrWhiteSpace($env:ARGOCD_ALLOWED_CIDRS)) {
+            throw "ARGOCD_ALLOWED_CIDRS must be provided when updating the Argo CD ingress."
+        }
+
+        Invoke-NativeCommand -FilePath $kubectl -Arguments @(
+            "annotate",
+            "ingress",
+            "argocd-server",
+            "--namespace",
+            "argocd",
+            "--overwrite",
+            "alb.ingress.kubernetes.io/inbound-cidrs=$($env:ARGOCD_ALLOWED_CIDRS)"
+        )
+        Write-Host "Updated Argo CD ingress allowlist to $($env:ARGOCD_ALLOWED_CIDRS)."
+        return
+    }
 
     if ($Destroy) {
         & $helm uninstall retail-store-app --namespace argocd --wait --timeout 15m
@@ -132,7 +154,8 @@ try {
         "ARGOCD_CHART_VERSION",
         "ARGOCD_APPS_CHART_VERSION",
         "GITHUB_REPOSITORY_URL",
-        "GITHUB_BRANCH"
+        "GITHUB_BRANCH",
+        "ARGOCD_ALLOWED_CIDRS"
     )) {
         if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
             throw "Required environment variable '$name' was not set by Terraform."
@@ -200,6 +223,42 @@ try {
         "--timeout", "20m"
     )
 
+    $argocdIngressManifest = @"
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/backend-protocol: HTTPS
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    alb.ingress.kubernetes.io/inbound-cidrs: "$($env:ARGOCD_ALLOWED_CIDRS)"
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 443
+"@
+    [System.IO.File]::WriteAllText(
+        $argocdIngressPath,
+        $argocdIngressManifest,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    Invoke-NativeCommand -FilePath $kubectl -Arguments @(
+        "apply", "--filename", $argocdIngressPath
+    )
+
     $applicationValuesObject = @{
         applications = @{
             "retail-store" = @{
@@ -258,9 +317,27 @@ try {
 
         Start-Sleep -Seconds 5
     } while ($true)
+
+    $ingressDeadline = (Get-Date).AddMinutes(15)
+    do {
+        $ingressAddress = & $kubectl get ingress argocd-server `
+            --namespace argocd `
+            --output "jsonpath={.status.loadBalancer.ingress[0].hostname}" 2>$null
+
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($ingressAddress)) {
+            Write-Host "Argo CD URL (HTTP, restricted to $($env:ARGOCD_ALLOWED_CIDRS)): http://$ingressAddress"
+            break
+        }
+
+        if ((Get-Date) -ge $ingressDeadline) {
+            throw "Timed out waiting for the Argo CD public ALB address."
+        }
+
+        Start-Sleep -Seconds 15
+    } while ($true)
 }
 finally {
-    Remove-Item -LiteralPath $loadBalancerValues,$applicationValuesPath,$kubeconfig `
+    Remove-Item -LiteralPath $loadBalancerValues,$applicationValuesPath,$argocdIngressPath,$kubeconfig `
         -Force `
         -ErrorAction SilentlyContinue
 }

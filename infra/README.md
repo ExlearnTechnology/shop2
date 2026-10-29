@@ -32,7 +32,7 @@ protected remote backend before applying.
 - GitHub Actions enabled for `ExlearnTechnology/shop2`
 
 The EKS public API endpoint is restricted to the CIDRs provided below. Avoid
-using `0.0.0.0/0`.
+using `0.0.0.0/0`. The same CIDRs restrict the Argo CD ALB ingress.
 
 ## Apply
 
@@ -43,6 +43,21 @@ only public API CIDR:
 $operatorCidr = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com").Trim() + "/32"
 $env:TF_VAR_cluster_endpoint_public_access_cidrs = ConvertTo-Json @($operatorCidr) -Compress
 ```
+
+That CIDR also allowlists the Argo CD ALB. The bootstrap creates an
+internet-facing ALB, but only clients whose public source IP matches an
+allowlisted CIDR can connect. If your public IP changes later, set the variable
+again to the new IP and apply Terraform with the same state:
+
+```powershell
+$operatorCidr = "203.0.113.10/32" # Replace with your current public IP.
+$env:TF_VAR_cluster_endpoint_public_access_cidrs = ConvertTo-Json @($operatorCidr) -Compress
+terraform -chdir=infra plan -out=terraform.tfplan
+terraform -chdir=infra apply terraform.tfplan
+```
+
+Terraform updates both the EKS public API endpoint allowlist and the Argo CD
+ALB ingress allowlist. It does not reinstall Argo CD for an IP-only change.
 
 Review the plan before applying:
 
@@ -63,6 +78,13 @@ resource to be registered, not for workloads to become Healthy. Run the
 workflow below to build and push the images and update the chart. Argo CD then
 automatically syncs and the workloads should become Healthy. No Terraform
 apply has been run as part of preparing this configuration.
+
+The bootstrap also creates an Argo CD ingress and prints its AWS-generated
+ALB DNS name when available. The UI is reachable at `http://<ALB-DNS>` from
+the allowlisted IP only. **This temporary endpoint uses HTTP, not HTTPS**;
+Argo CD login traffic is not encrypted between your browser and the ALB. Do
+not use it over untrusted networks or for long-term access. For permanent
+access, use a domain and ACM certificate to configure an HTTPS listener.
 
 The cluster, two private worker subnets, two NAT gateways, and managed node
 group can incur ongoing AWS charges. The bootstrap add-ons are removed by the
@@ -97,13 +119,14 @@ aws eks update-kubeconfig --region ap-south-1 --name retail-eks
 & $kubectl get ingress --namespace retail-store
 ```
 
-To access Argo CD locally, run:
+To access Argo CD using the ALB URL, retrieve its address with:
 
 ```powershell
-& $kubectl port-forward --namespace argocd svc/argocd-server 8080:443
+& $kubectl get ingress argocd-server --namespace argocd
 ```
 
-In another PowerShell window, retrieve its initial administrator password:
+The address is also printed by the Terraform bootstrap. Sign in as `admin`.
+Retrieve the initial administrator password with:
 
 ```powershell
 $encodedPassword = & $kubectl get secret argocd-initial-admin-secret `
@@ -112,8 +135,8 @@ $encodedPassword = & $kubectl get secret argocd-initial-admin-secret `
 [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($encodedPassword))
 ```
 
-Open `https://localhost:8080` and sign in as `admin`. Do not publish the
-password.
+Do not publish the password. If you prefer not to use the public HTTP UI,
+continue to use a port-forward over the bastion/SSM tunnel instead.
 
 ## Configuration
 

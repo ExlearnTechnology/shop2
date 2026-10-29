@@ -228,6 +228,7 @@ resource "terraform_data" "cluster_addons" {
       ARGOCD_APPS_CHART_VERSION    = "2.0.7"
       GITHUB_REPOSITORY_URL        = "https://github.com/${var.github_owner}/${var.github_repository}.git"
       GITHUB_BRANCH                = var.github_actions_branch
+      ARGOCD_ALLOWED_CIDRS         = join(",", var.cluster_endpoint_public_access_cidrs)
     }
   }
 
@@ -259,4 +260,42 @@ resource "terraform_data" "cluster_addons" {
     aws_eks_node_group.workers,
     aws_iam_role_policy_attachment.alb_controller,
   ]
+}
+
+resource "terraform_data" "argocd_ingress_access" {
+  input = {
+    aws_region   = var.aws_region
+    cluster_name = var.cluster_name
+    allowed_cidrs = join(
+      ",",
+      var.cluster_endpoint_public_access_cidrs
+    )
+  }
+
+  triggers_replace = [
+    aws_eks_cluster.eks.endpoint,
+    jsonencode(var.cluster_endpoint_public_access_cidrs),
+    filesha256("${path.module}/bootstrap-addons.ps1"),
+  ]
+
+  provisioner "local-exec" {
+    interpreter = [
+      "PowerShell",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+    ]
+
+    command = "& '${path.module}/bootstrap-addons.ps1' -UpdateIngress"
+
+    environment = {
+      AWS_REGION           = self.input.aws_region
+      EKS_CLUSTER_NAME     = self.input.cluster_name
+      ARGOCD_ALLOWED_CIDRS = self.input.allowed_cidrs
+    }
+  }
+
+  depends_on = [terraform_data.cluster_addons]
 }
