@@ -4,11 +4,13 @@ on: workflow_dispatch
 
 permissions:
   contents: read
-  id-token: write
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'retail-eks' }}
   IMAGE_TAG: ${{ github.sha }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 concurrency:
   group: retail-store-gitops
@@ -44,7 +46,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Log in to Amazon ECR 2
@@ -67,17 +70,17 @@ jobs:
     needs: build
     permissions:
       contents: write
-      id-token: write
     steps:
       - name: Check out source
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials 2
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Get ECR registry
@@ -115,3 +118,47 @@ jobs:
           fi
           git commit -m "chore(gitops): update images to ${IMAGE_TAG}"
           git push
+
+      - name: Enable Argo CD auto-sync after images are pushed
+        run: |
+          set -euo pipefail
+          cluster_version="$(aws eks describe-cluster \
+            --name "$EKS_CLUSTER_NAME" \
+            --region "$AWS_REGION" \
+            --query 'cluster.version' \
+            --output text)"
+          kubectl_version="$(curl -fsSL "https://dl.k8s.io/release/stable-${cluster_version}.txt")"
+          curl -fsSLo "$RUNNER_TEMP/kubectl" \
+            "https://dl.k8s.io/release/${kubectl_version}/bin/linux/amd64/kubectl"
+          chmod +x "$RUNNER_TEMP/kubectl"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          export PATH="$RUNNER_TEMP:$PATH"
+          export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+          aws eks update-kubeconfig \
+            --name "$EKS_CLUSTER_NAME" \
+            --region "$AWS_REGION" \
+            --kubeconfig "$KUBECONFIG"
+          kubectl auth can-i patch applications.argoproj.io/retail-store --namespace argocd
+          kubectl patch application retail-store \
+            --namespace argocd \
+            --type merge \
+            --patch '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+
+          deadline=$((SECONDS + 1800))
+          while true; do
+            sync_status="$(kubectl get application retail-store \
+              --namespace argocd \
+              --output 'jsonpath={.status.sync.status}' 2>/dev/null || true)"
+            health_status="$(kubectl get application retail-store \
+              --namespace argocd \
+              --output 'jsonpath={.status.health.status}' 2>/dev/null || true)"
+            echo "Argo CD application: sync=${sync_status:-Unknown}, health=${health_status:-Unknown}"
+            if [[ "$sync_status" == "Synced" && "$health_status" == "Healthy" ]]; then
+              break
+            fi
+            if (( SECONDS >= deadline )); then
+              echo "Timed out waiting for the Argo CD application to become Synced and Healthy."
+              exit 1
+            fi
+            sleep 15
+          done
