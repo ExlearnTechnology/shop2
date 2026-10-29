@@ -32,7 +32,8 @@ protected remote backend before applying.
 - GitHub Actions enabled for `ExlearnTechnology/shop2`
 
 The EKS public API endpoint is restricted to the CIDRs provided below. Avoid
-using `0.0.0.0/0`. The same CIDRs restrict the Argo CD ALB ingress.
+using `0.0.0.0/0` for the Kubernetes API. The Argo CD ALB has a separate
+allowlist; its test-project default is `0.0.0.0/0` (all IPv4 addresses).
 
 ## Apply
 
@@ -44,20 +45,21 @@ $operatorCidr = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com").Trim() 
 $env:TF_VAR_cluster_endpoint_public_access_cidrs = ConvertTo-Json @($operatorCidr) -Compress
 ```
 
-That CIDR also allowlists the Argo CD ALB. The bootstrap creates an
-internet-facing ALB, but only clients whose public source IP matches an
-allowlisted CIDR can connect. If your public IP changes later, set the variable
-again to the new IP and apply Terraform with the same state:
+The bootstrap creates an internet-facing ALB for Argo CD. By default, its
+allowlist is `0.0.0.0/0`, so anyone on the internet can reach the Argo CD login
+page. This is intentionally separate from the EKS API allowlist. To restrict
+the UI to your public IP instead, set:
 
 ```powershell
-$operatorCidr = "203.0.113.10/32" # Replace with your current public IP.
-$env:TF_VAR_cluster_endpoint_public_access_cidrs = ConvertTo-Json @($operatorCidr) -Compress
+$argocdCidr = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com").Trim() + "/32"
+$env:TF_VAR_argocd_ingress_allowed_cidrs = ConvertTo-Json @($argocdCidr) -Compress
 terraform -chdir=infra plan -out=terraform.tfplan
 terraform -chdir=infra apply terraform.tfplan
 ```
 
-Terraform updates both the EKS public API endpoint allowlist and the Argo CD
-ALB ingress allowlist. It does not reinstall Argo CD for an IP-only change.
+Changing this variable updates the Argo CD ALB allowlist without reinstalling
+Argo CD. Changing `cluster_endpoint_public_access_cidrs` separately updates
+the Kubernetes API endpoint allowlist.
 
 Review the plan before applying:
 
@@ -81,10 +83,11 @@ apply has been run as part of preparing this configuration.
 
 The bootstrap also creates an Argo CD ingress and prints its AWS-generated
 ALB DNS name when available. The UI is reachable at `http://<ALB-DNS>` from
-the allowlisted IP only. **This temporary endpoint uses HTTP, not HTTPS**;
-Argo CD login traffic is not encrypted between your browser and the ALB. Do
-not use it over untrusted networks or for long-term access. For permanent
-access, use a domain and ACM certificate to configure an HTTPS listener.
+the configured allowlist. **The test endpoint uses HTTP, not HTTPS; login
+traffic is not encrypted between your browser and the ALB.** With the default
+`0.0.0.0/0`, anyone can reach the login page and attempt to sign in. Restrict
+the allowlist and use a domain with an ACM certificate for HTTPS before
+long-term use.
 
 The cluster, two private worker subnets, two NAT gateways, and managed node
 group can incur ongoing AWS charges. The bootstrap add-ons are removed by the

@@ -228,7 +228,7 @@ resource "terraform_data" "cluster_addons" {
       ARGOCD_APPS_CHART_VERSION    = "2.0.7"
       GITHUB_REPOSITORY_URL        = "https://github.com/${var.github_owner}/${var.github_repository}.git"
       GITHUB_BRANCH                = var.github_actions_branch
-      ARGOCD_ALLOWED_CIDRS         = join(",", var.cluster_endpoint_public_access_cidrs)
+      ARGOCD_ALLOWED_CIDRS         = join(",", var.argocd_ingress_allowed_cidrs)
     }
   }
 
@@ -264,17 +264,14 @@ resource "terraform_data" "cluster_addons" {
 
 resource "terraform_data" "argocd_ingress_access" {
   input = {
-    aws_region   = var.aws_region
-    cluster_name = var.cluster_name
-    allowed_cidrs = join(
-      ",",
-      var.cluster_endpoint_public_access_cidrs
-    )
+    aws_region    = var.aws_region
+    cluster_name  = var.cluster_name
+    allowed_cidrs = join(",", var.argocd_ingress_allowed_cidrs)
   }
 
   triggers_replace = [
     aws_eks_cluster.eks.endpoint,
-    jsonencode(var.cluster_endpoint_public_access_cidrs),
+    jsonencode(var.argocd_ingress_allowed_cidrs),
     filesha256("${path.module}/bootstrap-addons.ps1"),
   ]
 

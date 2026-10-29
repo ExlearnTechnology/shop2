@@ -35,6 +35,20 @@ variable "cluster_endpoint_public_access_cidrs" {
   }
 }
 
+variable "argocd_ingress_allowed_cidrs" {
+  description = "IPv4 CIDRs allowed to reach the Argo CD public ALB. 0.0.0.0/0 allows the entire internet."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+
+  validation {
+    condition = (
+      length(var.argocd_ingress_allowed_cidrs) > 0 &&
+      alltrue([for cidr in var.argocd_ingress_allowed_cidrs : can(cidrnetmask(cidr))])
+    )
+    error_message = "Provide at least one valid IPv4 CIDR for the Argo CD ingress."
+  }
+}
+
 variable "node_min_size" {
   description = "Minimum number of EKS worker nodes."
   type        = number
