@@ -61,57 +61,57 @@ jobs:
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
 
-  # update-gitops:
-  #   name: Update Helm image tags
-  #   runs-on: ubuntu-latest
-  #   needs: build
-  #   permissions:
-  #     contents: write
-  #   steps:
-  #     - name: Check out source
-  #       uses: actions/checkout@v4
-  #       with:
-  #         ref: ${{ github.ref_name }}
+  update-gitops:
+    name: Update Helm image tags
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
 
-  #     - name: Configure AWS credentials
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #         aws-region: ${{ env.AWS_REGION }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-  #     - name: Get ECR registry
-  #       id: registry
-  #       run: echo "registry=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_OUTPUT"
+      - name: Get ECR registry
+        id: registry
+        run: echo "registry=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_OUTPUT"
 
-  #     - name: Update chart image values
-  #       uses: mikefarah/yq@v4.45.1
-  #       env:
-  #         IMAGE_TAG: ${{ env.IMAGE_TAG }}
-  #         REGISTRY: ${{ steps.registry.outputs.registry }}
-  #       with:
-  #         cmd: |
-  #           yq -i '
-  #             .cart.image.repository = strenv(REGISTRY) + "/retail-store/cart" |
-  #             .cart.image.tag = strenv(IMAGE_TAG) |
-  #             .catalog.image.repository = strenv(REGISTRY) + "/retail-store/catalog" |
-  #             .catalog.image.tag = strenv(IMAGE_TAG) |
-  #             .checkout.image.repository = strenv(REGISTRY) + "/retail-store/checkout" |
-  #             .checkout.image.tag = strenv(IMAGE_TAG) |
-  #             .orders.image.repository = strenv(REGISTRY) + "/retail-store/orders" |
-  #             .orders.image.tag = strenv(IMAGE_TAG) |
-  #             .ui.image.repository = strenv(REGISTRY) + "/retail-store/ui" |
-  #             .ui.image.tag = strenv(IMAGE_TAG)
-  #           ' charts/retail-store/values.yaml
+      - name: Update chart image values
+        uses: mikefarah/yq@v4.45.1
+        env:
+          IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          REGISTRY: ${{ steps.registry.outputs.registry }}
+        with:
+          cmd: |
+            yq -i '
+              .cart.image.repository = strenv(REGISTRY) + "/retail-store/cart" |
+              .cart.image.tag = strenv(IMAGE_TAG) |
+              .catalog.image.repository = strenv(REGISTRY) + "/retail-store/catalog" |
+              .catalog.image.tag = strenv(IMAGE_TAG) |
+              .checkout.image.repository = strenv(REGISTRY) + "/retail-store/checkout" |
+              .checkout.image.tag = strenv(IMAGE_TAG) |
+              .orders.image.repository = strenv(REGISTRY) + "/retail-store/orders" |
+              .orders.image.tag = strenv(IMAGE_TAG) |
+              .ui.image.repository = strenv(REGISTRY) + "/retail-store/ui" |
+              .ui.image.tag = strenv(IMAGE_TAG)
+            ' charts/retail-store/values.yaml
 
-  #     - name: Commit image tag changes
-  #       run: |
-  #         git config user.name "github-actions[bot]"
-  #         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-  #         git add charts/retail-store/values.yaml
-  #         if git diff --cached --quiet; then
-  #           echo "Image tags are already up to date."
-  #           exit 0
-  #         fi
-  #         git commit -m "chore(gitops): update images to ${IMAGE_TAG}"
-  #         git push
+      - name: Commit image tag changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add charts/retail-store/values.yaml
+          if git diff --cached --quiet; then
+            echo "Image tags are already up to date."
+            exit 0
+          fi
+          git commit -m "chore(gitops): update images to ${IMAGE_TAG}"
+          git push

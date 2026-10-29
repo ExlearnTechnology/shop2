@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/LondheShubham153/retail-store-sample-app
+    repoURL: https://github.com/ExlearnTechnology/shop2.git
     targetRevision: main
     path: charts/retail-store
   destination:
