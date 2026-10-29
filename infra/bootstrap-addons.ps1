@@ -62,6 +62,8 @@ Install or update AWS CLI v2, confirm 'aws --version' reports aws-cli/2.x, then 
 
 $toolDirectory = Join-Path $env:LOCALAPPDATA "retail-eks-tools"
 $null = New-Item -ItemType Directory -Force -Path $toolDirectory
+$awsDirectory = Split-Path -Parent $aws
+$env:PATH = "$awsDirectory;$toolDirectory;$env:PATH"
 $kubectl = Join-Path $toolDirectory "kubectl.exe"
 $helm = Join-Path $toolDirectory "helm.exe"
 $kubeconfig = Join-Path $env:TEMP "retail-eks-$($env:EKS_CLUSTER_NAME)-$PID.yaml"
@@ -114,8 +116,15 @@ try {
         "--region", $env:AWS_REGION,
         "--kubeconfig", $kubeconfig
     )
+    $kubeconfigContent = Get-Content -Raw -LiteralPath $kubeconfig
+    if ($kubeconfigContent -match "client\.authentication\.k8s\.io/v1alpha1") {
+        throw @"
+The selected AWS CLI generated a kubeconfig using the removed ExecCredential v1alpha1 API.
+Detected: $awsVersion
+Update AWS CLI to a current v2 release, confirm 'aws --version' reports aws-cli/2.x, then rerun terraform apply.
+"@
+    }
     $env:KUBECONFIG = $kubeconfig
-    $env:PATH = "$toolDirectory;$env:PATH"
 
     if ($UpdateIngress) {
         if ([string]::IsNullOrWhiteSpace($env:ARGOCD_ALLOWED_CIDRS)) {

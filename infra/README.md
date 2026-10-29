@@ -26,9 +26,9 @@ protected remote backend before applying.
 
 - Windows with Windows PowerShell 5.1 or later
 - Terraform 1.5 or later
-- AWS CLI **v2** (AWS CLI v1 is not supported by the EKS bootstrap) configured
-  with credentials for an IAM principal that can create the required VPC, EKS,
-  EC2, ECR, IAM, and OIDC resources
+- A current AWS CLI **v2** release (AWS CLI v1 is not supported by the EKS
+  bootstrap) configured with credentials for an IAM principal that can create
+  the required VPC, EKS, EC2, ECR, IAM, and OIDC resources
 - A public IPv4 address from which you will run Terraform
 - An EC2 key pair in the configured AWS region if you intend to SSH to the
   bastion (the current instance configuration does not attach a key pair)
@@ -91,6 +91,14 @@ created with automated sync disabled, so Terraform does not deploy the retail
 store. Run the workflow below to build and push the images and update the
 chart; only then does the workflow enable Argo CD auto-sync and wait for the
 application to become Synced and Healthy.
+
+If the bootstrap reports an unsupported
+`client.authentication.k8s.io/v1alpha1` `ExecCredential` API, update AWS CLI
+to a current v2 release and rerun `terraform apply`. Older CLI releases can
+generate credentials that the downloaded `kubectl` no longer accepts. If
+multiple AWS CLI installations are on `PATH`, the bootstrap prioritizes the
+v2 executable it selected so the kubeconfig credential plugin uses that same
+version.
 
 The bastion's cloud-init user data installs AWS CLI v2, kubectl, and Helm.
 Changes to that bootstrap replace the bastion instance when applied, so
