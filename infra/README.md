@@ -31,14 +31,16 @@ protected remote backend before applying.
 - A public IPv4 address from which you will run Terraform
 - GitHub Actions enabled for `ExlearnTechnology/shop2`
 
-The EKS public API endpoint is restricted to the CIDRs provided below. Avoid
-using `0.0.0.0/0` for the Kubernetes API. The Argo CD ALB has a separate
-allowlist; its test-project default is `0.0.0.0/0` (all IPv4 addresses).
+The EKS public API endpoint defaults to `0.0.0.0/0`, which allows connection
+attempts from every IPv4 address on the internet. This is intentionally
+permissive for this test project and is not recommended for a production
+cluster. The Argo CD ALB has a separate allowlist; its default is also
+`0.0.0.0/0`.
 
 ## Apply
 
-Open PowerShell in the repository root and set the current operator IP as the
-only public API CIDR:
+For a safer test setup, open PowerShell in the repository root and restrict
+the EKS API to your current public IP instead of using the permissive default:
 
 ```powershell
 $operatorCidr = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com").Trim() + "/32"

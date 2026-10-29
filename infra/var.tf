@@ -22,16 +22,16 @@ variable "kubernetes_version" {
 }
 
 variable "cluster_endpoint_public_access_cidrs" {
-  description = "IPv4 CIDRs allowed to reach the EKS public API endpoint. Set this to your operator IP with a /32 mask."
+  description = "IPv4 CIDRs allowed to reach the EKS public API endpoint. The default allows access from any IPv4 address."
   type        = list(string)
+  default     = ["0.0.0.0/0"]
 
   validation {
     condition = (
       length(var.cluster_endpoint_public_access_cidrs) > 0 &&
-      alltrue([for cidr in var.cluster_endpoint_public_access_cidrs : can(cidrnetmask(cidr))]) &&
-      !contains(var.cluster_endpoint_public_access_cidrs, "0.0.0.0/0")
+      alltrue([for cidr in var.cluster_endpoint_public_access_cidrs : can(cidrnetmask(cidr))])
     )
-    error_message = "Provide at least one valid IPv4 CIDR and do not expose the EKS API to 0.0.0.0/0."
+    error_message = "Provide at least one valid IPv4 CIDR."
   }
 }
 
