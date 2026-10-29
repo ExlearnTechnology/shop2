@@ -15,6 +15,12 @@ ort-build
 Chart.lock
 **/charts/*.tgz
 
+# Terraform generated files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
 .nx/cache
 .nx/workspace-data
 
