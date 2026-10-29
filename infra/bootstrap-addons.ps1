@@ -60,6 +60,7 @@ $kubeconfig = Join-Path $env:TEMP "retail-eks-$($env:EKS_CLUSTER_NAME)-$PID.yaml
 $loadBalancerValues = Join-Path $env:TEMP "retail-eks-alb-values-$PID.json"
 $applicationValuesPath = Join-Path $env:TEMP "retail-eks-argocd-app-values-$PID.json"
 $argocdIngressPath = Join-Path $env:TEMP "retail-eks-argocd-ingress-$PID.yaml"
+$argocdWorkflowRbacPath = Join-Path $env:TEMP "retail-eks-argocd-workflow-rbac-$PID.yaml"
 
 try {
     Invoke-NativeCommand -FilePath $aws -Arguments @(
@@ -283,10 +284,6 @@ spec:
                     namespace = "retail-store"
                 }
                 syncPolicy = @{
-                    automated = @{
-                        prune    = $true
-                        selfHeal = $true
-                    }
                     syncOptions = @("CreateNamespace=true")
                 }
             }
@@ -307,6 +304,41 @@ spec:
         "--values", $applicationValuesPath,
         "--wait",
         "--timeout", "10m"
+    )
+
+    $argocdWorkflowRbacManifest = @"
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: github-actions-argocd-sync
+  namespace: argocd
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    resourceNames: ["retail-store"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: github-actions-argocd-sync
+  namespace: argocd
+subjects:
+  - kind: Group
+    name: github-actions-argocd-sync
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: github-actions-argocd-sync
+  apiGroup: rbac.authorization.k8s.io
+"@
+    [System.IO.File]::WriteAllText(
+        $argocdWorkflowRbacPath,
+        $argocdWorkflowRbacManifest,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    Invoke-NativeCommand -FilePath $kubectl -Arguments @(
+        "apply", "--filename", $argocdWorkflowRbacPath
     )
 
     $deadline = (Get-Date).AddMinutes(5)
@@ -346,7 +378,7 @@ spec:
     } while ($true)
 }
 finally {
-    Remove-Item -LiteralPath $loadBalancerValues,$applicationValuesPath,$argocdIngressPath,$kubeconfig `
+    Remove-Item -LiteralPath $loadBalancerValues,$applicationValuesPath,$argocdIngressPath,$argocdWorkflowRbacPath,$kubeconfig `
         -Force `
         -ErrorAction SilentlyContinue
 }

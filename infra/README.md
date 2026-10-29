@@ -96,10 +96,11 @@ machine. It downloads pinned Helm and the matching `kubectl` into the local
 user tools directory, installs the AWS Load Balancer Controller and Argo CD,
 and registers the `retail-store` Argo CD application. The initial chart values
 may point to images that do not exist yet; Terraform waits for the application
-resource to be registered, not for workloads to become Healthy. Run the
-workflow below to build and push the images and update the chart. Argo CD then
-automatically syncs and the workloads should become Healthy. No Terraform
-apply has been run as part of preparing this configuration.
+resource to be registered, not for workloads to become Healthy. The app is
+created with automated sync disabled, so Terraform does not deploy the retail
+store. Run the workflow below to build and push the images and update the
+chart; only then does the workflow enable Argo CD auto-sync and wait for the
+application to become Synced and Healthy.
 
 The bootstrap also creates an Argo CD ingress and prints its AWS-generated
 ALB DNS name when available. The UI is reachable at `http://<ALB-DNS>` from
@@ -115,24 +116,35 @@ Terraform destroy provisioner before the cluster is deleted.
 
 ## Configure GitHub Actions and deploy
 
-After a successful apply, add a **repository Actions variable** named
-`AWS_ROLE_ARN` in **Settings > Secrets and variables > Actions > Variables**.
-Set its value to:
+After a successful apply, add repository Actions secrets named
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in
+**Settings > Secrets and variables > Actions > Secrets**. Use keys for an IAM
+principal with permission to push to the five ECR repositories, describe the
+EKS cluster, and access the EKS Kubernetes API.
 
-```powershell
-terraform -chdir=infra output -raw github_actions_ecr_role_arn
-```
+The workflow uses these credentials directly; it does not use the
+`AWS_ROLE_ARN` variable or GitHub OIDC. The IAM principal for the access keys
+must also be authorized in EKS to get and patch the `retail-store` Argo CD
+Application in the `argocd` namespace. The Terraform-created EKS access entry
+currently authorizes its GitHub Actions role, not an IAM user whose keys you
+provide. Add the IAM user principal to EKS access and bind the
+`github-actions-argocd-sync` Kubernetes group before running the workflow.
+The workflow enables auto-sync only after the images are pushed and the
+image-tag commit is made. It then waits for Synced/Healthy status. Auto-sync
+remains enabled for subsequent GitOps updates. `AWS_REGION` and
+`EKS_CLUSTER_NAME` are optional workflow variables; they default to
+`ap-south-1` and `retail-eks`.
 
-The workflow uses GitHub OIDC to assume this Terraform-created role; it does
-not need long-lived AWS access-key secrets. The role trust is limited to the
-configured repository and branch. `AWS_REGION` is optional because the
-workflow defaults to `ap-south-1`.
+The GitHub-hosted runner must be able to reach the EKS Kubernetes API endpoint.
+If you restrict `cluster_endpoint_public_access_cidrs` to a local IP, the
+workflow cannot connect from GitHub-hosted runners; use a suitable runner or
+network path before restricting that endpoint.
 
 Run **Build and update retail store GitOps** from the `main` branch using
 **Actions > Run workflow**. The workflow builds and pushes all five images to
 ECR, updates their tags in `charts/retail-store/values.yaml`, and pushes that
-GitOps commit. Argo CD watches the configured repository branch and
-automatically syncs the changed Helm values.
+GitOps commit. The workflow then enables automated sync on the Argo CD
+application and waits for it to deploy successfully.
 
 Retrieve the application ingress address after deployment:
 

@@ -185,6 +185,13 @@ resource "aws_iam_role_policy_attachment" "alb_controller" {
   policy_arn = aws_iam_policy.alb_controller.arn
 }
 
+resource "aws_eks_access_entry" "github_actions_argocd_sync" {
+  cluster_name      = aws_eks_cluster.eks.name
+  principal_arn     = aws_iam_role.github_actions_ecr.arn
+  kubernetes_groups = ["github-actions-argocd-sync"]
+  type              = "STANDARD"
+}
+
 resource "terraform_data" "cluster_addons" {
   input = {
     aws_region   = var.aws_region
@@ -259,6 +266,7 @@ resource "terraform_data" "cluster_addons" {
     aws_eks_addon.ebs_csi,
     aws_eks_node_group.workers,
     aws_iam_role_policy_attachment.alb_controller,
+    aws_eks_access_entry.github_actions_argocd_sync,
   ]
 }
 

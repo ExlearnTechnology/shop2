@@ -57,6 +57,11 @@ resource "aws_iam_role_policy" "github_actions_ecr" {
         ]
         Resource = [for repository in aws_ecr_repository.services : repository.arn]
       },
+      {
+        Effect   = "Allow"
+        Action   = ["eks:DescribeCluster"]
+        Resource = [aws_eks_cluster.eks.arn]
+      },
     ]
   })
 }
