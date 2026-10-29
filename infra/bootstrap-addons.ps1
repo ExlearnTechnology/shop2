@@ -42,9 +42,17 @@ foreach ($name in $requiredEnvironment) {
     }
 }
 
-$aws = (Get-Command aws -ErrorAction Stop).Source
-$awsVersion = & $aws --version 2>&1
-if ($LASTEXITCODE -ne 0 -or $awsVersion -notmatch "aws-cli/2\.") {
+$aws = $null
+$awsVersion = $null
+foreach ($awsCommand in Get-Command aws -All -ErrorAction Stop) {
+    $candidateVersion = & $awsCommand.Source --version 2>&1
+    $awsVersion = $candidateVersion
+    if ($LASTEXITCODE -eq 0 -and $candidateVersion -match "aws-cli/2\.") {
+        $aws = $awsCommand.Source
+        break
+    }
+}
+if (-not $aws) {
     throw @"
 AWS CLI v2 is required for EKS authentication with this kubectl version.
 Detected: $awsVersion
@@ -138,14 +146,33 @@ try {
             throw "Could not remove the retail-store namespace and its ALB ingress."
         }
 
-        & $helm uninstall aws-load-balancer-controller --namespace kube-system --wait --timeout 10m
+        & $kubectl delete ingress argocd-server --namespace argocd `
+            --ignore-not-found=true --wait=true --timeout=20m
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning "AWS Load Balancer Controller release was not installed or could not be removed."
+            throw "Could not remove the Argo CD ingress while the load balancer controller is available."
+        }
+
+        $targetGroupBindings = & $kubectl get targetgroupbindings.elbv2.k8s.aws `
+            --namespace argocd --output name
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not inspect Argo CD target group bindings."
+        }
+        if ($targetGroupBindings) {
+            & $kubectl wait --for=delete --namespace argocd `
+                $targetGroupBindings --timeout=20m
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not remove Argo CD target group bindings while the load balancer controller is available."
+            }
         }
 
         & $helm uninstall argocd --namespace argocd --wait --timeout 15m
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "Argo CD release was not installed or could not be removed."
+        }
+
+        & $helm uninstall aws-load-balancer-controller --namespace kube-system --wait --timeout 10m
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "AWS Load Balancer Controller release was not installed or could not be removed."
         }
 
         & $kubectl delete namespace argocd --ignore-not-found=true --wait=true --timeout=10m

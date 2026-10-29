@@ -42,14 +42,6 @@ cluster. The Argo CD ALB has a separate allowlist; its default is also
 
 ## Apply
 
-Open PowerShell in the repository root and set your operator's public IP for
-the SSH ingress rule. The Terraform variable rejects `0.0.0.0/0` for SSH:
-
-```powershell
-$operatorCidr = (Invoke-RestMethod -Uri "https://checkip.amazonaws.com").Trim() + "/32"
-$env:TF_VAR_bastion_ssh_allowed_cidrs = ConvertTo-Json @($operatorCidr) -Compress
-```
-
 For a safer test setup, also restrict the EKS API to your current public IP
 instead of using the permissive default:
 
@@ -74,12 +66,10 @@ Changing this variable updates the Argo CD ALB allowlist without reinstalling
 Argo CD. Changing `cluster_endpoint_public_access_cidrs` separately updates
 the Kubernetes API endpoint allowlist.
 
-The bastion security group permits SSH only from
-`bastion_ssh_allowed_cidrs`. However, the current bastion EC2 configuration
+The bastion security group permits SSH from `0.0.0.0/0` for this test project.
+This is not recommended outside testing. The current bastion EC2 configuration
 does not attach an EC2 key pair, so allowing port 22 alone does not provide a
-working SSH login. Continue to use the configured SSM access unless the
-bastion is deliberately recreated with a key pair and its private key is
-secured outside the repository.
+working SSH login; use the configured SSM access.
 
 Review the plan before applying:
 

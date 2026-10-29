@@ -347,15 +347,15 @@ resource "aws_eks_addon" "ebs_csi" {
 
 resource "aws_security_group" "bastion" {
   name        = "retail-eks-bastion-sg"
-  description = "Restricted SSH and outbound access for the EKS bastion."
+  description = "SSH and outbound access for the EKS bastion."
   vpc_id      = aws_vpc.eks.id
 
   ingress {
-    description = "SSH from explicitly allowed operator CIDRs."
+    description = "SSH access for test purposes."
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = var.bastion_ssh_allowed_cidrs
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
