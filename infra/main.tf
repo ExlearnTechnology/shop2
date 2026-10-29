@@ -447,31 +447,45 @@ resource "aws_instance" "bastion" {
   vpc_security_group_ids      = [aws_security_group.bastion.id]
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.bastion.name
+  user_data_replace_on_change = true
 
   user_data = <<-EOF
     #!/bin/bash
-    set -euxo pipefail
+    set -euo pipefail
+    trap 'status=$?; echo "Bastion bootstrap failed at line $LINENO (exit $status)." >&2; exit "$status"' ERR
 
-    dnf install -y unzip tar gzip
+    dnf install -y unzip
 
-    curl -fsSLo awscliv2.zip "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    curl --retry 5 --retry-all-errors --retry-delay 2 -fsSLo awscliv2.zip \
+      "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     unzip -q awscliv2.zip
-    ./aws/install
+    ./aws/install --update
+    rm -rf aws awscliv2.zip
+    aws --version
 
-    CLUSTER_VERSION="$(aws eks describe-cluster --region ${var.aws_region} --name ${var.cluster_name} --query 'cluster.version' --output text)"
-    KUBECTL_VERSION="$(curl -fsSL "https://dl.k8s.io/release/stable-$${CLUSTER_VERSION}.txt")"
-    curl -fsSLo kubectl "https://dl.k8s.io/release/$${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
-    chmod +x kubectl
-    mv kubectl /usr/local/bin/
+    KUBECTL_VERSION="$(curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
+      "https://dl.k8s.io/release/stable-${var.kubernetes_version}.txt")"
+    case "$${KUBECTL_VERSION}" in
+      v${var.kubernetes_version}.*) ;;
+      *) echo "Unexpected kubectl version: $${KUBECTL_VERSION}" >&2; exit 1 ;;
+    esac
+    curl --retry 5 --retry-all-errors --retry-delay 2 -fsSLo kubectl \
+      "https://dl.k8s.io/release/$${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+    curl --retry 5 --retry-all-errors --retry-delay 2 -fsSLo kubectl.sha256 \
+      "https://dl.k8s.io/release/$${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
+    echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
+    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    rm -f kubectl kubectl.sha256
+    kubectl version --client
 
-    curl -fsSLo helm.tar.gz "https://get.helm.sh/helm-v3.18.6-linux-amd64.tar.gz"
+    curl --retry 5 --retry-all-errors --retry-delay 2 -fsSLo helm.tar.gz \
+      "https://get.helm.sh/helm-v3.18.6-linux-amd64.tar.gz"
     tar -xzf helm.tar.gz linux-amd64/helm
     install linux-amd64/helm /usr/local/bin/helm
+    rm -rf linux-amd64 helm.tar.gz
 
     aws eks update-kubeconfig --region ${var.aws_region} --name ${var.cluster_name}
-    kubectl version --client
     helm version
-    aws --version
   EOF
 
   metadata_options {

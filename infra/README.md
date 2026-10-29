@@ -102,6 +102,10 @@ store. Run the workflow below to build and push the images and update the
 chart; only then does the workflow enable Argo CD auto-sync and wait for the
 application to become Synced and Healthy.
 
+The bastion's cloud-init user data installs AWS CLI v2, kubectl, and Helm.
+Changes to that bootstrap replace the bastion instance when applied, so
+review the Terraform plan for the replacement before applying.
+
 The bootstrap also creates an Argo CD ingress and prints its AWS-generated
 ALB DNS name when available. The UI is reachable at `http://<ALB-DNS>` from
 the configured allowlist. **The test endpoint uses HTTP, not HTTPS; login

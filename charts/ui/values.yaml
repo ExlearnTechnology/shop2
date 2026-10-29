@@ -95,7 +95,7 @@ ingresses: []
 # Cert Manager Configuration
 certManager:
   createClusterIssuer: false
-  email: trainwithshubham@gmail.com
+  email: test@gmail.com
   clusterIssuerName: "letsencrypt-prod"
   server: "https://acme-v02.api.letsencrypt.org/directory"
   privateKeySecretName: "letsencrypt-prod-key"
