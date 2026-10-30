@@ -484,7 +484,13 @@ resource "aws_instance" "bastion" {
     install linux-amd64/helm /usr/local/bin/helm
     rm -rf linux-amd64 helm.tar.gz
 
-    aws eks update-kubeconfig --region ${var.aws_region} --name ${var.cluster_name}
+    install -d -o ec2-user -g ec2-user -m 0700 /home/ec2-user/.kube
+    aws eks update-kubeconfig \
+      --region ${var.aws_region} \
+      --name ${var.cluster_name} \
+      --kubeconfig /home/ec2-user/.kube/config
+    chown ec2-user:ec2-user /home/ec2-user/.kube/config
+    chmod 0600 /home/ec2-user/.kube/config
     helm version
   EOF
 
