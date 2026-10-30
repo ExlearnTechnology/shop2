@@ -35,7 +35,6 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/sethvargo/go-envconfig/pkg/envconfig"
-	ginprometheus "github.com/zsais/go-gin-prometheus"
 
 	"go.opentelemetry.io/contrib/detectors/aws/ec2"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
@@ -89,9 +88,6 @@ func main() {
 	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{
 		SkipPaths: []string{"/health"},
 	}))
-
-	p := ginprometheus.NewPrometheus("gin")
-	p.Use(r)
 
 	c, err := controller.NewController(api)
 	if err != nil {

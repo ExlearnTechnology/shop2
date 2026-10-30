@@ -55,8 +55,6 @@ The following table lists the configurable parameters of the UI chart and their 
 | tolerations                                | Pod tolerations                                 | []                                                                                                   |
 | affinity                                   | Pod affinity                                    | {}                                                                                                   |
 | topologySpreadConstraints                  | Pod topology spread constraints                 | []                                                                                                   |
-| metrics.enabled                            | Enable metrics collection                       | true                                                                                                 |
-| metrics.podAnnotations                     | Metrics pod annotations                         | prometheus.io/scrape: "true", prometheus.io/port: "8080", prometheus.io/path: "/actuator/prometheus" |
 | configMap.create                           | Create ConfigMap                                | true                                                                                                 |
 | configMap.name                             | Name of the ConfigMap                           | Generated if not set                                                                                 |
 | app.theme                                  | Application theme (e.g., default, orange, dark) | default                                                                                              |

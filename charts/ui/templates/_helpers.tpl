@@ -78,10 +78,7 @@ Create the name of the config map to use
 
 {{/* podAnnotations */}}
 {{- define "ui.podAnnotations" -}}
-{{- if or .Values.metrics.enabled .Values.podAnnotations }}
-{{- $podAnnotations := .Values.podAnnotations}}
-{{- $metricsAnnotations := .Values.metrics.podAnnotations}}
-{{- $allAnnotations := merge $podAnnotations $metricsAnnotations }}
-{{- toYaml $allAnnotations }}
+{{- with .Values.podAnnotations }}
+{{- toYaml . }}
 {{- end }}
 {{- end -}}

@@ -2,7 +2,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: info,health,metrics,prometheus
+        include: info,health
 
 spring.autoconfigure.exclude:
   - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration

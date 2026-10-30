@@ -51,14 +51,6 @@ resources:
     cpu: 128m
     memory: 512Mi
 
-# Metrics
-metrics:
-  enabled: true
-  podAnnotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "8080"
-    prometheus.io/path: "/actuator/prometheus"
-
 # Cert Manager Configuration
 certManager:
   createClusterIssuer: true

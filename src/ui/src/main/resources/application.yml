@@ -67,6 +67,6 @@ management:
   endpoints:
     web:
       exposure:
-        include: info,health,metrics,prometheus
+        include: info,health
 
 otel.sdk.disabled: true

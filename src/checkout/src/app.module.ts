@@ -23,7 +23,6 @@ import { ConfigModule } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
 import { CheckoutModule } from './checkout/checkout.module';
 import { LoggerMiddleware } from './middleware/logger.middleware';
-import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { OpenTelemetryModule } from 'nestjs-otel';
 import { ChaosController } from './chaos/chaos.controller';
 import { ChaosService } from './chaos/chaos.service';
@@ -38,7 +37,6 @@ const OpenTelemetryModuleConfig = OpenTelemetryModule.forRoot({});
       load: [configuration],
     }),
     TerminusModule,
-    PrometheusModule.register(),
     CheckoutModule,
     OpenTelemetryModuleConfig,
   ],
